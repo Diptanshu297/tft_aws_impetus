@@ -1,0 +1,4 @@
+*.ckpt
+*.pth
+lightning_logs/
+predictions/
