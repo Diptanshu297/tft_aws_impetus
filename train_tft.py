@@ -1,4 +1,3 @@
-# ✅ train_tft.py (multi-product ready and compatible)
 import pandas as pd
 import torch
 from pytorch_forecasting import TimeSeriesDataSet, TemporalFusionTransformer
@@ -8,7 +7,7 @@ from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 import os
 
-# === Load and preprocess ===
+
 print("\U0001F4E6 Loading data...")
 df = pd.read_csv(
     "data/processed/m5_tft_ready.csv",
@@ -24,20 +23,20 @@ df = pd.read_csv(
     memory_map=True
 )
 
-# ✅ Optionally filter top N products
+
 top_products = df["product_id"].value_counts().head(10).index
 df = df[df["product_id"].isin(top_products)].copy()
 
-# ✅ Preprocess
+
 print("🛠️ Preprocessing...")
 df["price"] = df["price"].ffill().bfill().fillna(0)
 df["time_idx"] = (df["date"] - df["date"].min()).dt.days
 
-# === Define encoder/predict window ===
+
 max_encoder_length = 30
 max_prediction_length = 7
 
-# === Create training dataset
+
 training = TimeSeriesDataSet(
     df[df.time_idx < df.time_idx.max() - max_prediction_length],
     time_idx="time_idx",
@@ -53,18 +52,17 @@ training = TimeSeriesDataSet(
     add_encoder_length=True,
 )
 
-# ✅ Validation set
+
 validation = TimeSeriesDataSet.from_dataset(
     training,
     df[df.time_idx >= df.time_idx.max() - max_prediction_length - max_encoder_length],
     stop_randomization=True,
 )
 
-# === Dataloaders
 train_loader = training.to_dataloader(train=True, batch_size=64, num_workers=0)
 val_loader = validation.to_dataloader(train=False, batch_size=64, num_workers=0)
 
-# === TFT Model
+
 tft = TemporalFusionTransformer.from_dataset(
     training,
     learning_rate=0.0005,
@@ -76,7 +74,7 @@ tft = TemporalFusionTransformer.from_dataset(
     reduce_on_plateau_patience=4,
 )
 
-# === Logger & Trainer
+
 logger = TensorBoardLogger("lightning_logs", name="tft")
 trainer = Trainer(
     max_epochs=20,
@@ -89,7 +87,7 @@ trainer = Trainer(
     accelerator="auto",
 )
 
-# === Train & Save
+
 print("🚀 Training started...")
 trainer.fit(tft, train_dataloaders=train_loader, val_dataloaders=val_loader)
 os.makedirs("checkpoints", exist_ok=True)
