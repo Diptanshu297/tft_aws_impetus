@@ -8,27 +8,26 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-# === Load data ===
+
 print("📦 Loading data...")
 df = pd.read_csv("data/processed/m5_tft_ready.csv", parse_dates=["date"])
 df["price"] = df["price"].ffill().bfill().fillna(0)
 df["product_id"] = df["product_id"].astype("category")
 df["time_idx"] = (df["date"] - df["date"].min()).dt.days
 
-# === Filter top products
+
 top_products = df["product_id"].value_counts().head(10).index.tolist()
 df = df[df["product_id"].isin(top_products)].copy()
 print("✅ Filtered product_id categories in dataset:")
 print(df["product_id"].cat.categories)
 
-# === Load model
+
 model = TemporalFusionTransformer.load_from_checkpoint("checkpoints/tft_model.ckpt")
 
-# === Setup parameters
+
 max_encoder_length = 30
 max_prediction_length = 7
 
-# === Rebuild training dataset
 training = TimeSeriesDataSet(
     df[df.time_idx < df.time_idx.max() - max_prediction_length],
     time_idx="time_idx",
@@ -46,10 +45,10 @@ training = TimeSeriesDataSet(
 
 print("🎯 Real-valued features used during training:", training.reals)
 
-# === Filter last N days for prediction
+
 predict_df = df[df.time_idx >= df.time_idx.max() - (max_encoder_length + max_prediction_length)].copy()
 
-# Ensure product_id is categorical with correct levels
+
 predict_df["product_id"] = pd.Categorical(
     predict_df["product_id"],
     categories=training.get_transformer("product_id").classes_,
@@ -59,14 +58,14 @@ predict_df["product_id"] = pd.Categorical(
 
 
 
-# ✅ Do NOT manually add relative_time_idx or encoder_length
+
 try:
  prediction_dataset = TimeSeriesDataSet.from_dataset(
     training,
     predict_df,
     predict=True,
     stop_randomization=True,
-   add_target_scales=True,  # 🔥 This is the missing piece
+   add_target_scales=True,  
 )
 
 
@@ -75,7 +74,7 @@ except Exception:
     traceback.print_exc()
     exit(1)
 
-# === Dataloader
+
 dataloader = prediction_dataset.to_dataloader(train=False, batch_size=1, num_workers=0)
 x, _ = next(iter(dataloader))
 
@@ -84,7 +83,6 @@ print(f"🧪 Expected reals: {training.reals}")
 print(f"🔍 Max product_id index: {x['decoder_cat'][:, :, 0].max().item()}, "
       f"Embedding size: {model.input_embeddings['product_id'].num_embeddings}")
 
-# === Prediction
 try:
     raw_predictions, x = model.predict(dataloader, mode="raw", return_x=True)
 except Exception:
@@ -92,7 +90,6 @@ except Exception:
     traceback.print_exc()
     exit(1)
 
-# === Collect results
 predicted_quantities = raw_predictions["prediction"].detach().cpu().numpy()
 decoder_cats = x["decoder_cat"]
 results = []
@@ -104,13 +101,13 @@ for i, pred in enumerate(predicted_quantities):
     for day, value in enumerate(pred[0]):
         results.append({"product_id": product, "day": day + 1, "predicted_quantity": value})
 
-# === Save forecast
+
 os.makedirs("predictions", exist_ok=True)
 pred_df = pd.DataFrame(results)
 pred_df.to_csv("predictions/tft_forecast.csv", index=False)
 print("✅ Saved predictions to predictions/tft_forecast.csv")
 
-# === Plot forecast
+
 plt.figure(figsize=(8, 5))
 for product in pred_df["product_id"].unique():
     product_data = pred_df[pred_df["product_id"] == product]
