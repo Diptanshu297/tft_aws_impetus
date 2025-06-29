@@ -6,17 +6,17 @@ from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 
-# === Load data
+
 df = pd.read_csv("data/processed/m5_tft_ready.csv", parse_dates=["date"])
 df["product_id"] = df["product_id"].astype("category")
 df["time_idx"] = (df["date"] - df["date"].min()).dt.days
 df["price"] = df["price"].ffill().bfill().fillna(0)
 
-# Use only top 2 products (same as your current pipeline)
+
 top_products = df["product_id"].value_counts().head(2).index
 df = df[df["product_id"].isin(top_products)].copy()
 
-# === Define dataset
+
 max_encoder_length = 30
 max_prediction_length = 7
 
@@ -40,7 +40,6 @@ validation = TimeSeriesDataSet.from_dataset(training, df, predict=True, stop_ran
 train_loader = training.to_dataloader(train=True, batch_size=64, num_workers=0)
 val_loader = validation.to_dataloader(train=False, batch_size=64, num_workers=0 )
 
-# === Objective function for Optuna
 def objective(trial):
     model = TemporalFusionTransformer.from_dataset(
         training,
@@ -66,10 +65,10 @@ def objective(trial):
     val_loss = trainer.callback_metrics["val_loss"].item()
     return val_loss
 
-# === Run optimization
-study = optuna.create_study(direction="minimize", study_name="tft_hyperparam_tuning")
-study.optimize(objective, n_trials=20, timeout=3600)  # 20 trials or 1 hour
 
-# === Print best result
+study = optuna.create_study(direction="minimize", study_name="tft_hyperparam_tuning")
+study.optimize(objective, n_trials=20, timeout=3600) 
+
+
 print("🎯 Best trial:")
 print(study.best_trial.params)
